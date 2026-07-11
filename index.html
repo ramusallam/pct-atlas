@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>PCT Atlas — Sections, Offline Maps & Progress</title>
+<meta name="description" content="Pacific Crest Trail section atlas: offline maps, GPS, and section-by-section progress tracking.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PCT Atlas">
+<meta name="theme-color" content="#4F46E5">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/icons/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Roboto+Mono:wght@400;700&family=Roboto+Serif:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<div id="app">
+  <aside id="panel">
+    <header class="hero" id="hero">
+      <div class="kicker">Pacific Crest Trail</div>
+      <h1>PCT Atlas</h1>
+      <div class="hero-stats">
+        <div class="stat"><span class="num" id="stat-miles">0</span><span class="lbl">miles hiked</span></div>
+        <div class="stat"><span class="num" id="stat-pct">0%</span><span class="lbl">of trail</span></div>
+        <div class="stat"><span class="num" id="stat-secs">0/29</span><span class="lbl">sections</span></div>
+      </div>
+      <div class="hero-bar"><div class="hero-bar-fill" id="hero-bar-fill"></div></div>
+    </header>
+
+    <div class="sheet-handle" id="sheet-handle" role="button" aria-label="Expand section list" tabindex="0">
+      <div class="handle-pill"></div>
+    </div>
+
+    <div id="panel-body">
+      <!-- Section list view -->
+      <div id="view-list">
+        <div class="list-tools">
+          <span class="eyebrow">29 sections · Mexico → Canada</span>
+          <button class="btn ghost tiny" id="btn-sync" title="Sync progress between devices">
+            <svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+            Sync
+          </button>
+        </div>
+        <div id="section-list"></div>
+      </div>
+
+      <!-- Single section view -->
+      <div id="view-section" hidden>
+        <button class="btn ghost tiny" id="btn-back">
+          <svg class="ic" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+          All sections
+        </button>
+        <div class="sec-card">
+          <div class="eyebrow" id="sec-eyebrow">CA · Section K</div>
+          <h2 id="sec-title">Echo Lake → Donner Pass</h2>
+          <div class="chips">
+            <span class="chip" id="chip-miles">63 mi</span>
+            <span class="chip" id="chip-gain">+12,200 ft</span>
+            <span class="chip done-chip" id="chip-done" hidden>
+              <svg class="ic" viewBox="0 0 24 24"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+              <span id="chip-done-date"></span>
+            </span>
+          </div>
+          <canvas id="elev" width="640" height="120" aria-label="Elevation profile"></canvas>
+          <div class="legend">
+            <label><input type="checkbox" data-kind="water" checked><span class="dot water"></span>Water</label>
+            <label><input type="checkbox" data-kind="camp" checked><span class="dot camp"></span>Camps</label>
+            <label><input type="checkbox" data-kind="road"><span class="dot road"></span>Roads</label>
+            <label><input type="checkbox" data-kind="landmark"><span class="dot lm"></span>Landmarks</label>
+          </div>
+          <div class="sec-actions">
+            <button class="btn primary" id="btn-complete">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+              <span>Mark complete</span>
+            </button>
+            <button class="btn ghost" id="btn-pack">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span id="pack-label">Download offline map</span>
+            </button>
+          </div>
+          <div class="pack-progress" id="pack-progress" hidden><div class="pack-progress-fill" id="pack-progress-fill"></div></div>
+          <div class="pack-status" id="pack-status"></div>
+        </div>
+      </div>
+    </div>
+
+    <footer id="install-hint" hidden>
+      <svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><rect x="4" y="17" width="16" height="4" rx="1"/></svg>
+      For offline use on iPhone: Share → <strong>Add to Home Screen</strong>
+    </footer>
+  </aside>
+
+  <main id="map-wrap">
+    <div id="map"></div>
+    <div id="offline-badge" hidden>
+      <svg class="ic" viewBox="0 0 24 24"><line x1="2" y1="2" x2="22" y2="22"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+      Offline
+    </div>
+  </main>
+</div>
+
+<!-- Sync modal -->
+<div id="modal" hidden>
+  <div class="modal-card">
+    <div class="eyebrow">Sync progress</div>
+    <h3>Move progress between devices</h3>
+    <p>Copy this code on one device, paste it on the other.</p>
+    <textarea id="sync-code" rows="3" spellcheck="false"></textarea>
+    <div class="sec-actions">
+      <button class="btn primary" id="btn-copy-code">Copy my code</button>
+      <button class="btn ghost" id="btn-import-code">Import pasted code</button>
+    </div>
+    <button class="btn ghost tiny" id="btn-close-modal">Close</button>
+  </div>
+</div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="vendor/pmtiles.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
