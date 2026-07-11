@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>PCT Atlas — Sections, Offline Maps & Progress</title>
-<meta name="description" content="Pacific Crest Trail section atlas: offline maps, GPS, and section-by-section progress tracking.">
+<title>PCT Atlas · Sections, Offline Maps & Progress</title>
+<meta name="description" content="Pacific Crest Trail atlas: offline maps, GPS, and mile-by-mile progress, Mexico to Canada.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PCT Atlas">
@@ -29,7 +29,8 @@
         <div class="stat"><span class="num" id="stat-pct">0%</span><span class="lbl">of trail</span></div>
         <div class="stat"><span class="num" id="stat-secs">0/29</span><span class="lbl">sections</span></div>
       </div>
-      <div class="hero-bar"><div class="hero-bar-fill" id="hero-bar-fill"></div></div>
+      <div class="hero-bar"><div class="hero-bar-fill" id="hero-bar-fill"></div><div id="hero-ticks"></div></div>
+      <div class="hero-next" id="hero-next"></div>
     </header>
 
     <div class="sheet-handle" id="sheet-handle" role="button" aria-label="Expand section list" tabindex="0">
@@ -56,11 +57,13 @@
           All sections
         </button>
         <div class="sec-card">
-          <div class="eyebrow" id="sec-eyebrow">CA · Section K</div>
+          <div class="eyebrow" id="sec-eyebrow">California · Section K</div>
           <h2 id="sec-title">Echo Lake → Donner Pass</h2>
           <div class="chips">
             <span class="chip" id="chip-miles">63 mi</span>
             <span class="chip" id="chip-gain">+12,200 ft</span>
+            <span class="chip" id="chip-span">mile 1093.5 → 1158.2</span>
+            <span class="chip partial-chip" id="chip-progress" hidden></span>
             <span class="chip done-chip" id="chip-done" hidden>
               <svg class="ic" viewBox="0 0 24 24"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
               <span id="chip-done-date"></span>
@@ -74,15 +77,47 @@
             <label><input type="checkbox" data-kind="landmark"><span class="dot lm"></span>Landmarks</label>
           </div>
           <div class="sec-actions">
-            <button class="btn primary" id="btn-complete">
-              <svg class="ic" viewBox="0 0 24 24"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
-              <span>Mark complete</span>
+            <button class="btn primary" id="btn-log">
+              <svg class="ic" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg>
+              <span>Log miles</span>
             </button>
             <button class="btn ghost" id="btn-pack">
               <svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               <span id="pack-label">Download offline map</span>
             </button>
+            <button class="btn ghost tiny" id="btn-clear" hidden>Clear logged miles</button>
           </div>
+
+          <!-- Inline stretch logger -->
+          <div class="logger" id="logger" hidden>
+            <div class="logger-head">
+              <span class="eyebrow">Log a stretch</span>
+              <span class="logger-hint">Drag the handles. They snap to landmarks.</span>
+            </div>
+            <div class="range" id="range">
+              <div class="range-track">
+                <div id="range-done-spans"></div>
+                <div class="range-fill" id="range-fill"></div>
+              </div>
+              <div class="range-ticks" id="range-ticks"></div>
+              <button class="range-handle" id="handle-a" role="slider" aria-label="Start mile"><span class="handle-readout" id="readout-a"></span></button>
+              <button class="range-handle" id="handle-b" role="slider" aria-label="End mile"><span class="handle-readout" id="readout-b"></span></button>
+            </div>
+            <div class="logger-summary" id="logger-summary">
+              <span class="from" id="log-from"></span>
+              <svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+              <span class="to" id="log-to"></span>
+              <span class="dist" id="log-dist"></span>
+            </div>
+            <div class="logger-actions">
+              <button class="btn primary" id="btn-log-confirm">
+                <svg class="ic" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+                <span id="log-confirm-label">Log miles</span>
+              </button>
+              <button class="btn ghost tiny" id="btn-log-cancel">Cancel</button>
+            </div>
+          </div>
+
           <div class="pack-progress" id="pack-progress" hidden><div class="pack-progress-fill" id="pack-progress-fill"></div></div>
           <div class="pack-status" id="pack-status"></div>
         </div>
@@ -103,6 +138,9 @@
     </div>
   </main>
 </div>
+
+<!-- Toast -->
+<div id="toast-root"></div>
 
 <!-- Sync modal -->
 <div id="modal" hidden>
