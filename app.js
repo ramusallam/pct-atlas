@@ -26,7 +26,7 @@ const MILESTONES = [
   { mile: 2655.8, title: 'Northern Terminus', sub: 'Mexico to Canada. Done.', icon: '<path d="M17 22V2L7 7l10 5"/>' },
 ];
 
-let map, basemapLayers, index, overviewGeo, geoCtl;
+let map, basemapLayers, index, overviewGeo, geoCtl, demSource;
 let TOTAL = 2655.8;
 let mode = 'list';
 let current = null;
@@ -219,6 +219,20 @@ function doneSlicesGeo() {
   const protocol = new pmtiles.Protocol();
   maplibregl.addProtocol('pmtiles', protocol.tile);
 
+  // terrain: hillshade + contours from open elevation tiles (online enhancement;
+  // offline the vector base still renders without it)
+  try {
+    if (window.mlcontour) {
+      demSource = new mlcontour.DemSource({
+        url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+        encoding: 'terrarium',
+        maxzoom: 13,
+        worker: true,
+      });
+      demSource.setupMaplibre(maplibregl);
+    }
+  } catch { demSource = null; }
+
   map = new maplibregl.Map({
     container: 'map',
     style: overviewStyle(),
@@ -271,7 +285,7 @@ function doneSlicesGeo() {
 
 /* ================= map styles ================= */
 function styleBase(archiveUrl) {
-  return {
+  const s = {
     version: 8,
     glyphs: BASE + 'assets/fonts/{fontstack}/{range}.pbf',
     sprite: BASE + 'assets/sprites/light',
@@ -279,11 +293,49 @@ function styleBase(archiveUrl) {
       basemap: {
         type: 'vector',
         url: 'pmtiles://' + archiveUrl,
-        attribution: '<a href="https://openstreetmap.org">© OpenStreetMap</a> <a href="https://protomaps.com">Protomaps</a> · Trail: PCTA',
+        attribution: '<a href="https://openstreetmap.org">© OpenStreetMap</a> <a href="https://protomaps.com">Protomaps</a> · Terrain: Mapzen · Trail: PCTA',
       },
     },
     layers: basemapLayers.slice(),
   };
+  if (demSource) {
+    s.sources['dem'] = {
+      type: 'raster-dem', encoding: 'terrarium',
+      tiles: [demSource.sharedDemProtocolUrl], maxzoom: 13, tileSize: 256,
+    };
+    s.sources['contours'] = {
+      type: 'vector',
+      tiles: [demSource.contourProtocolUrl({
+        multiplier: 3.28084, // label elevations in feet
+        thresholds: { 11: [200, 1000], 12: [100, 500], 13: [100, 500], 14: [50, 250] },
+        elevationKey: 'ele', levelKey: 'level', contourLayer: 'contours',
+      })],
+      maxzoom: 15,
+    };
+    const terrainLayers = [
+      { id: 'hillshade', type: 'hillshade', source: 'dem',
+        paint: { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': '#8A7C63', 'hillshade-highlight-color': '#FFFFFF', 'hillshade-accent-color': '#B9A98C' } },
+      { id: 'contour-lines', type: 'line', source: 'contours', 'source-layer': 'contours', minzoom: 11,
+        paint: {
+          'line-color': '#A99878',
+          'line-opacity': ['match', ['get', 'level'], 1, 0.5, 0.28],
+          'line-width': ['match', ['get', 'level'], 1, 1.1, 0.6],
+        } },
+      { id: 'contour-labels', type: 'symbol', source: 'contours', 'source-layer': 'contours', minzoom: 12,
+        filter: ['>', ['get', 'level'], 0],
+        layout: {
+          'symbol-placement': 'line',
+          'text-field': ['concat', ['number-format', ['get', 'ele'], { 'max-fraction-digits': 0 }], ' ft'],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': 10,
+        },
+        paint: { 'text-color': '#8A7C63', 'text-halo-color': '#F7F3EE', 'text-halo-width': 1.4 } },
+    ];
+    // sit beneath water and everything built on top of it
+    const at = s.layers.findIndex((l) => l.id === 'water');
+    s.layers.splice(at > 0 ? at : s.layers.length, 0, ...terrainLayers);
+  }
+  return s;
 }
 
 function overviewStyle() {
@@ -340,8 +392,10 @@ function sectionStyle(sec, archiveUrl) {
   s.sources['miles'] = { type: 'geojson', data: mileMarkerPoints(sec) };
   const lineDefaults = { 'line-cap': 'round', 'line-join': 'round' };
   s.layers.push(
+    { id: 'track-casing', type: 'line', source: 'track', layout: lineDefaults,
+      paint: { 'line-color': '#FFFFFF', 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 5.5, 14, 8.5], 'line-opacity': 0.85 } },
     { id: 'track-line', type: 'line', source: 'track', layout: lineDefaults,
-      paint: { 'line-color': '#6366f1', 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 3, 14, 5], 'line-opacity': 0.85 } },
+      paint: { 'line-color': '#6366f1', 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 3, 14, 5] } },
     { id: 'track-done', type: 'line', source: 'track-done', layout: lineDefaults,
       paint: { 'line-color': '#10b981', 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 3.5, 14, 5.5] } },
     { id: 'anim-line', type: 'line', source: 'anim', layout: lineDefaults,

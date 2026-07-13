@@ -1,8 +1,8 @@
 /* PCT Atlas service worker — offline app shell + section data + tile-pack range serving */
 'use strict';
 
-const SHELL_CACHE = 'pct-shell-v3';
-const RUNTIME_CACHE = 'pct-runtime-v3';
+const SHELL_CACHE = 'pct-shell-v4';
+const RUNTIME_CACHE = 'pct-runtime-v4';
 const PACK_CACHE = 'pct-packs-v1'; // written by the page, served here — never purge on upgrade
 
 const SECTION_IDS = [
@@ -15,7 +15,7 @@ const FONT_RANGES = ['0-255', '256-511', '512-767', '768-1023', '8192-8447'];
 
 const SHELL = [
   './', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest',
-  'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css', 'vendor/pmtiles.js',
+  'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css', 'vendor/pmtiles.js', 'vendor/maplibre-contour.js',
   'assets/basemap-layers.json',
   'assets/sprites/light.json', 'assets/sprites/light.png', 'assets/sprites/light@2x.json', 'assets/sprites/light@2x.png',
   'assets/icons/icon-192.png', 'assets/icons/icon-512.png', 'assets/icons/apple-touch-icon.png',
