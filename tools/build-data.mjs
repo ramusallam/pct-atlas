@@ -190,6 +190,7 @@ const TOTAL_MILES = vMile[flat.length - 1];
 console.log('official total miles:', TOTAL_MILES.toFixed(1));
 
 /* ---------- 3. Halfmile waypoints + elevation profiles (per section) ---------- */
+const stripCdata = (s) => (s || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/&amp;/g, '&').replace(/&apos;/g, "'").replace(/&quot;/g, '"').trim();
 function parseWaypoints(xml) {
   const wpts = [];
   const blocks = xml.split('<wpt');
@@ -197,9 +198,9 @@ function parseWaypoints(xml) {
     const b = blocks[i];
     const lat = b.match(/lat="([-\d.]+)"/), lon = b.match(/lon="([-\d.]+)"/);
     if (!lat || !lon) continue;
-    const name = (b.match(/<name>([\s\S]*?)<\/name>/) || [])[1]?.trim() || '';
-    const desc = (b.match(/<desc>([\s\S]*?)<\/desc>/) || [])[1]?.trim() || '';
-    const sym = (b.match(/<sym>([\s\S]*?)<\/sym>/) || [])[1]?.trim() || '';
+    const name = stripCdata((b.match(/<name>([\s\S]*?)<\/name>/) || [])[1]);
+    const desc = stripCdata((b.match(/<desc>([\s\S]*?)<\/desc>/) || [])[1]);
+    const sym = stripCdata((b.match(/<sym>([\s\S]*?)<\/sym>/) || [])[1]);
     let type = 'landmark';
     const blob = (name + ' ' + sym).toLowerCase();
     if (/^wr?[a-z]?\d/i.test(name) || blob.includes('water')) type = 'water';

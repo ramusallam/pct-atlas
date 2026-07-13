@@ -1,8 +1,8 @@
 /* PCT Atlas service worker — offline app shell + section data + tile-pack range serving */
 'use strict';
 
-const SHELL_CACHE = 'pct-shell-v2';
-const RUNTIME_CACHE = 'pct-runtime-v2';
+const SHELL_CACHE = 'pct-shell-v3';
+const RUNTIME_CACHE = 'pct-runtime-v3';
 const PACK_CACHE = 'pct-packs-v1'; // written by the page, served here — never purge on upgrade
 
 const SECTION_IDS = [

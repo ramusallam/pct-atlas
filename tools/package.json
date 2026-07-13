@@ -10,6 +10,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@maplibre/maplibre-gl-style-spec": "^26.0.0",
     "@protomaps/basemaps": "^5.7.2",
     "protomaps-themes-base": "^4.5.0"
   }

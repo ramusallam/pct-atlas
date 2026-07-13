@@ -77,7 +77,11 @@
             <label><input type="checkbox" data-kind="landmark"><span class="dot lm"></span>Landmarks</label>
           </div>
           <div class="sec-actions">
-            <button class="btn primary" id="btn-log">
+            <button class="btn primary" id="btn-nav">
+              <svg class="ic" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+              <span>Navigate</span>
+            </button>
+            <button class="btn ghost" id="btn-log">
               <svg class="ic" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg>
               <span>Log miles</span>
             </button>
@@ -120,6 +124,51 @@
 
           <div class="pack-progress" id="pack-progress" hidden><div class="pack-progress-fill" id="pack-progress-fill"></div></div>
           <div class="pack-status" id="pack-status"></div>
+        </div>
+      </div>
+
+      <!-- Navigate mode HUD -->
+      <div id="view-nav" hidden>
+        <div class="nav-hud">
+          <div class="nav-top">
+            <div>
+              <div class="eyebrow" id="nav-eyebrow">Section K · Navigating</div>
+              <div class="nav-mile"><span id="nav-mile">····</span><span class="nav-mile-unit">trail mile</span></div>
+            </div>
+            <div class="nav-dir" role="group" aria-label="Direction of travel">
+              <button class="dir-btn active" id="dir-nobo" title="Northbound">N ↑</button>
+              <button class="dir-btn" id="dir-sobo" title="Southbound">S ↓</button>
+            </div>
+          </div>
+          <div class="nav-offtrail" id="nav-offtrail" hidden>
+            <svg class="ic" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+            <span id="nav-offtrail-text">0.2 mi from the trail</span>
+          </div>
+          <div class="nav-rows">
+            <div class="nav-row">
+              <span class="dot water"></span><span class="nav-label">Next water</span>
+              <span class="nav-name" id="nav-water-name">·</span>
+              <span class="nav-dist" id="nav-water-dist">·</span>
+            </div>
+            <div class="nav-row">
+              <span class="dot camp"></span><span class="nav-label">Next camp</span>
+              <span class="nav-name" id="nav-camp-name">·</span>
+              <span class="nav-dist" id="nav-camp-dist">·</span>
+            </div>
+            <div class="nav-row">
+              <svg class="ic nav-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+              <span class="nav-label" id="nav-end-label">Section end</span>
+              <span class="nav-name" id="nav-end-name">·</span>
+              <span class="nav-dist" id="nav-end-dist">·</span>
+            </div>
+          </div>
+          <div class="nav-status" id="nav-status">Waiting for GPS…</div>
+          <div class="sec-actions">
+            <button class="btn ghost" id="btn-nav-end">
+              <svg class="ic" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+              End navigation
+            </button>
+          </div>
         </div>
       </div>
     </div>

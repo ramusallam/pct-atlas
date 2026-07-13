@@ -26,7 +26,7 @@ const MILESTONES = [
   { mile: 2655.8, title: 'Northern Terminus', sub: 'Mexico to Canada. Done.', icon: '<path d="M17 22V2L7 7l10 5"/>' },
 ];
 
-let map, basemapLayers, index, overviewGeo;
+let map, basemapLayers, index, overviewGeo, geoCtl;
 let TOTAL = 2655.8;
 let mode = 'list';
 let current = null;
@@ -232,11 +232,16 @@ function doneSlicesGeo() {
   new ResizeObserver(() => map.resize()).observe($('map-wrap'));
 
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-  map.addControl(new maplibregl.GeolocateControl({
+  geoCtl = new maplibregl.GeolocateControl({
     positionOptions: { enableHighAccuracy: true },
     trackUserLocation: true,
     showUserHeading: true,
-  }), 'top-right');
+  });
+  map.addControl(geoCtl, 'top-right');
+  geoCtl.on('geolocate', (e) => { if (navState.active) onFix(e.coords); });
+  geoCtl.on('error', () => {
+    if (navState.active) $('nav-status').textContent = 'Location unavailable. Check Location Services for your browser.';
+  });
   map.addControl(new maplibregl.ScaleControl({ unit: 'imperial' }), 'bottom-right');
 
   map.on('click', 'trail-hit', (e) => {
@@ -305,6 +310,21 @@ function overviewStyle() {
   return s;
 }
 
+// point features at every whole trail mile along a section track
+function mileMarkerPoints(sec) {
+  const coords = sec.track.geometry.coordinates, mi = sec.track.properties.mi;
+  const feats = [];
+  if (!mi) return { type: 'FeatureCollection', features: feats };
+  let target = Math.ceil(sec.mileStart);
+  for (let i = 0; i < mi.length && target <= sec.mileEnd; i++) {
+    if (mi[i] >= target) {
+      feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: coords[i] }, properties: { m: target, m5: target % 5 === 0 } });
+      target += 1;
+    }
+  }
+  return { type: 'FeatureCollection', features: feats };
+}
+
 function sectionStyle(sec, archiveUrl) {
   const s = styleBase(archiveUrl);
   const mi = sec.track.properties.mi;
@@ -317,6 +337,7 @@ function sectionStyle(sec, archiveUrl) {
   s.sources['track-done'] = { type: 'geojson', data: { type: 'FeatureCollection', features: doneSlices } };
   s.sources['anim'] = { type: 'geojson', data: { type: 'FeatureCollection', features: [] } };
   s.sources['wpts'] = { type: 'geojson', data: sec.waypoints };
+  s.sources['miles'] = { type: 'geojson', data: mileMarkerPoints(sec) };
   const lineDefaults = { 'line-cap': 'round', 'line-join': 'round' };
   s.layers.push(
     { id: 'track-line', type: 'line', source: 'track', layout: lineDefaults,
@@ -331,6 +352,28 @@ function sectionStyle(sec, archiveUrl) {
         'circle-color': ['match', ['get', 'kind'], 'water', KIND_COLORS.water, 'camp', KIND_COLORS.camp, 'road', KIND_COLORS.road, KIND_COLORS.landmark],
         'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF',
       } },
+    { id: 'mile-dots-5', type: 'circle', source: 'miles', minzoom: 10, filter: ['get', 'm5'],
+      paint: { 'circle-radius': 2.5, 'circle-color': '#7C6F5A', 'circle-stroke-width': 1, 'circle-stroke-color': '#F7F3EE' } },
+    { id: 'mile-dots-1', type: 'circle', source: 'miles', minzoom: 12, filter: ['!', ['get', 'm5']],
+      paint: { 'circle-radius': 2.5, 'circle-color': '#7C6F5A', 'circle-stroke-width': 1, 'circle-stroke-color': '#F7F3EE' } },
+    { id: 'mile-markers-5', type: 'symbol', source: 'miles', minzoom: 10, filter: ['get', 'm5'],
+      layout: {
+        'text-field': ['to-string', ['get', 'm']],
+        'text-font': ['Noto Sans Medium'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 10, 10, 14, 12],
+        'text-offset': [0, -0.9],
+        'text-optional': true,
+      },
+      paint: { 'text-color': '#7C6F5A', 'text-halo-color': '#F7F3EE', 'text-halo-width': 1.6 } },
+    { id: 'mile-markers-1', type: 'symbol', source: 'miles', minzoom: 12, filter: ['!', ['get', 'm5']],
+      layout: {
+        'text-field': ['to-string', ['get', 'm']],
+        'text-font': ['Noto Sans Medium'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 12, 10, 14, 12],
+        'text-offset': [0, -0.9],
+        'text-optional': true,
+      },
+      paint: { 'text-color': '#7C6F5A', 'text-halo-color': '#F7F3EE', 'text-halo-width': 1.6 } },
   );
   return s;
 }
@@ -384,7 +427,9 @@ async function openSection(id) {
   map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 40, duration: 1200 });
 
   $('view-list').hidden = true;
+  $('view-nav').hidden = true;
   $('view-section').hidden = false;
+  $('btn-nav').hidden = !current.track.properties.mi;
   $('sec-eyebrow').textContent = `${STATE_LABEL[current.state]} · Section ${current.letter}`;
   $('sec-title').textContent = `${current.from} → ${current.to}`;
   $('chip-miles').textContent = `${fmt1(current.miles)} mi`;
@@ -397,6 +442,7 @@ async function openSection(id) {
 }
 
 function closeSection() {
+  if (navState.active) exitNav();
   mode = 'list'; current = null;
   closeLogger();
   map.setStyle(overviewStyle());
@@ -753,6 +799,112 @@ function clearSection() {
   closeLogger();
 }
 
+/* ================= navigate mode ================= */
+const navState = { active: false, dir: 1, gotFix: false, watchdog: null };
+
+// nearest point on the section track: returns trail mile + distance off-trail in meters
+function projectToTrack(lon, lat) {
+  const coords = current.track.geometry.coordinates, mi = current.track.properties.mi;
+  if (!mi) return null;
+  let best = Infinity, bI = 0, bT = 0;
+  const cosLat = Math.cos(lat * Math.PI / 180);
+  for (let i = 0; i < coords.length - 1; i++) {
+    const ax = (coords[i][0] - lon) * cosLat, ay = coords[i][1] - lat;
+    const bx = (coords[i + 1][0] - lon) * cosLat, by = coords[i + 1][1] - lat;
+    const dx = bx - ax, dy = by - ay;
+    const l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2)) : 0;
+    const cx = ax + t * dx, cy = ay + t * dy;
+    const d2 = cx * cx + cy * cy;
+    if (d2 < best) { best = d2; bI = i; bT = t; }
+  }
+  return { mile: mi[bI] + bT * (mi[bI + 1] - mi[bI]), offMeters: Math.sqrt(best) * 111320 };
+}
+
+// readable label for a waypoint (Halfmile names are often codes like WR1104)
+function wptLabel(p) {
+  const name = (p.name || '').trim();
+  if (/^[A-Z]{1,4}\d/.test(name) && p.desc) return p.desc.slice(0, 34);
+  return name || (p.desc || '').slice(0, 34) || 'Unnamed';
+}
+
+function nextAhead(kind, mile) {
+  let best = null, bd = Infinity;
+  for (const f of current.waypoints.features) {
+    const p = f.properties;
+    if (p.kind !== kind || !p.mile) continue;
+    const d = (p.mile - mile) * navState.dir;
+    if (d > 0.02 && d < bd) { bd = d; best = p; }
+  }
+  return best ? { label: wptLabel(best), dist: bd } : null;
+}
+
+function fmtDist(mi) { return mi >= 0.19 ? fmt1(mi) + ' mi' : Math.round(mi * 5280 / 10) * 10 + ' ft'; }
+
+function onFix(c) {
+  if (!current) return;
+  navState.lastFix = c;
+  const proj = projectToTrack(c.longitude, c.latitude);
+  if (!proj) return;
+  if (!navState.gotFix) {
+    navState.gotFix = true;
+    if (map.getZoom() < 12.5) map.easeTo({ center: [c.longitude, c.latitude], zoom: 13.5, duration: 800 });
+  }
+  $('nav-mile').textContent = fmt1(proj.mile);
+  const off = proj.offMeters;
+  $('nav-offtrail').hidden = off <= 90;
+  if (off > 90) $('nav-offtrail-text').textContent = fmtDist(off / 1609.344) + ' from the trail';
+
+  const water = nextAhead('water', proj.mile);
+  $('nav-water-name').textContent = water ? water.label : 'None ahead in section';
+  $('nav-water-dist').textContent = water ? fmtDist(water.dist) : '·';
+  const camp = nextAhead('camp', proj.mile);
+  $('nav-camp-name').textContent = camp ? camp.label : 'None ahead in section';
+  $('nav-camp-dist').textContent = camp ? fmtDist(camp.dist) : '·';
+
+  const endMile = navState.dir === 1 ? current.mileEnd : current.mileStart;
+  const endName = navState.dir === 1 ? current.to : current.from;
+  const endDist = (endMile - proj.mile) * navState.dir;
+  $('nav-end-name').textContent = endName;
+  $('nav-end-dist').textContent = endDist > 0.02 ? fmtDist(endDist) : 'Here';
+
+  const acc = c.accuracy ? '±' + Math.round(c.accuracy * 3.281) + ' ft' : '';
+  $('nav-status').textContent = `GPS ${acc} · updated ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+}
+
+function setDir(dir) {
+  navState.dir = dir;
+  $('dir-nobo').classList.toggle('active', dir === 1);
+  $('dir-sobo').classList.toggle('active', dir === -1);
+  if (navState.lastFix) onFix(navState.lastFix);
+}
+
+function enterNav() {
+  if (!current || !current.track.properties.mi) return;
+  navState.active = true;
+  navState.gotFix = false;
+  closeLogger();
+  $('view-section').hidden = true;
+  $('view-nav').hidden = false;
+  $('nav-eyebrow').textContent = `Section ${current.letter} · Navigating`;
+  $('nav-mile').textContent = '····';
+  $('nav-status').textContent = 'Waiting for GPS…';
+  document.getElementById('panel').classList.remove('expanded');
+  try { geoCtl.trigger(); } catch { }
+  clearTimeout(navState.watchdog);
+  navState.watchdog = setTimeout(() => {
+    if (navState.active && !navState.gotFix) $('nav-status').textContent = 'Still waiting for GPS. Make sure Location is allowed, and that you are outdoors or near a window.';
+  }, 15000);
+}
+
+function exitNav() {
+  navState.active = false;
+  clearTimeout(navState.watchdog);
+  $('view-nav').hidden = true;
+  $('view-section').hidden = false;
+  renderSectionState();
+}
+
 /* ================= celebration ================= */
 function celebrate(btn) {
   btn.classList.add('saved');
@@ -920,6 +1072,10 @@ function importSync() {
 /* ================= ui wiring ================= */
 function wireUI() {
   $('btn-back').addEventListener('click', closeSection);
+  $('btn-nav').addEventListener('click', enterNav);
+  $('btn-nav-end').addEventListener('click', exitNav);
+  $('dir-nobo').addEventListener('click', () => setDir(1));
+  $('dir-sobo').addEventListener('click', () => setDir(-1));
   $('btn-log').addEventListener('click', openLogger);
   $('btn-clear').addEventListener('click', clearSection);
   $('btn-pack').addEventListener('click', downloadPack);
