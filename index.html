@@ -51,11 +51,12 @@
         <div class="basemap-card" id="basemap-card" hidden>
           <svg class="ic basemap-ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           <div class="basemap-info">
-            <div class="basemap-title">Whole-trail base map</div>
+            <div class="basemap-title">Offline maps</div>
             <div class="basemap-sub" id="basemap-status">One download and the whole-trail map lives on this phone.</div>
           </div>
           <button class="btn primary tiny" id="btn-basemap"><span id="basemap-label">Download</span></button>
           <div class="pack-progress basemap-bar" id="basemap-progress" hidden><div class="pack-progress-fill" id="basemap-progress-fill"></div></div>
+          <button class="btn ghost tiny basemap-all" id="btn-all-packs"><span id="all-packs-label">Download every section for offline use</span></button>
         </div>
         <div class="list-tools">
           <span class="eyebrow">29 sections · Mexico → Canada</span>
@@ -76,6 +77,7 @@
         <div class="sec-card">
           <div class="eyebrow" id="sec-eyebrow">California · Section K</div>
           <h2 id="sec-title">Echo Lake → Donner Pass</h2>
+          <div class="sec-weather" id="sec-weather" hidden></div>
           <div class="chips">
             <span class="chip" id="chip-miles">63 mi</span>
             <span class="chip" id="chip-gain">+12,200 ft</span>

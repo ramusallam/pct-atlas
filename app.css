@@ -128,6 +128,14 @@ body {
 .basemap-sub { font-size: .72rem; color: var(--textWarmSecondary); }
 #btn-basemap.stored { background: var(--accentGreen); }
 .basemap-bar { flex-basis: 100%; margin-top: 2px; }
+.basemap-all { flex-basis: 100%; justify-content: center; }
+
+.sec-weather {
+  font-family: var(--font-mono); font-size: .7rem;
+  color: var(--textWarmSecondary); letter-spacing: .02em;
+  margin: -2px 0 10px;
+  font-variant-numeric: tabular-nums;
+}
 
 .ring {
   padding: 3px; border-radius: 13px; flex-shrink: 0;

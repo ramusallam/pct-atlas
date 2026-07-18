@@ -196,7 +196,13 @@ function doneSlicesGeo() {
 /* ================= boot ================= */
 (async function boot() {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      reg.update().catch(() => {});
+      // check for updates whenever the app comes back to the foreground
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) reg.update().catch(() => {});
+      });
+    }).catch(() => {});
     // when a new SW takes over a live page (data shape may have changed), reload once so code+data stay paired
     const hadController = !!navigator.serviceWorker.controller;
     let reloaded = false;
@@ -496,6 +502,7 @@ async function openSection(id) {
   closeLogger();
   renderSectionState();
   refreshPackUI();
+  loadWeather(current);
   document.querySelector('#panel-body').scrollTop = 0;
 }
 
@@ -880,6 +887,30 @@ function clearSection() {
   closeLogger();
 }
 
+/* ================= weather (National Weather Service, free, online-only) ================= */
+const weatherCache = {};
+async function loadWeather(sec) {
+  const el = $('sec-weather');
+  el.hidden = true;
+  if (!navigator.onLine || !sec.track) return;
+  const id = sec.id;
+  try {
+    if (!weatherCache[id]) {
+      const coords = sec.track.geometry.coordinates;
+      const mid = coords[Math.floor(coords.length / 2)];
+      const pt = await (await fetch(`https://api.weather.gov/points/${mid[1].toFixed(4)},${mid[0].toFixed(4)}`)).json();
+      const fc = await (await fetch(pt.properties.forecast)).json();
+      weatherCache[id] = fc.properties.periods.slice(0, 4).map((p) =>
+        `${p.name.length > 9 ? p.name.slice(0, 3) : p.name} ${p.temperature}° ${p.shortForecast.split(' then ')[0]}`
+      );
+    }
+    if (current && current.id === id) {
+      el.textContent = weatherCache[id].join('  ·  ');
+      el.hidden = false;
+    }
+  } catch { /* no weather offline or if NWS is down; the card just stays clean */ }
+}
+
 /* ================= navigate mode ================= */
 const navState = { active: false, dir: 1, gotFix: false, watchdog: null };
 
@@ -1123,7 +1154,16 @@ async function downloadPack() {
   setTimeout(() => { bar.hidden = true; refreshPackUI(); }, 600);
 }
 
-/* ---- whole-trail base map pack ---- */
+/* ---- whole-trail base map + download-all packs ---- */
+async function sectionPackStats() {
+  let n = 0, remainingBytes = 0;
+  for (const s of index) {
+    if (!PACKS[s.id]) continue;
+    if (await hasPack(s.id)) n++;
+    else remainingBytes += PACKS[s.id];
+  }
+  return { n, remainingBytes };
+}
 async function refreshBasemapUI() {
   const card = $('basemap-card');
   if (!card) return;
@@ -1132,9 +1172,38 @@ async function refreshBasemapUI() {
   const stored = await hasPack('overview');
   $('basemap-label').textContent = stored ? 'Stored ✓' : `Download (${(PACKS.overview / 1048576).toFixed(0)} MB)`;
   $('btn-basemap').classList.toggle('stored', stored);
+  const { n, remainingBytes } = await sectionPackStats();
+  const packCount = index.filter((s) => PACKS[s.id]).length;
   $('basemap-status').textContent = stored
-    ? 'On this phone. The whole-trail map works with no service.'
+    ? `Whole-trail map on this phone · ${n}/${packCount} section packs stored`
     : 'One download and the whole-trail map lives on this phone.';
+  $('all-packs-label').textContent = n >= packCount
+    ? 'Every section stored on this phone ✓'
+    : `Download every section for offline use (≈${Math.round(remainingBytes / 1048576)} MB)`;
+  $('btn-all-packs').disabled = n >= packCount;
+}
+async function downloadAllPacks() {
+  const btn = $('btn-all-packs'), bar = $('basemap-progress'), fill = $('basemap-progress-fill'), status = $('basemap-status');
+  btn.disabled = true; $('btn-basemap').disabled = true; bar.hidden = false;
+  try {
+    if (!(await hasPack('overview'))) {
+      status.textContent = 'Base map…';
+      await fetchArchive('overview', fill, status);
+    }
+    const todo = index.filter((s) => PACKS[s.id]);
+    for (let i = 0; i < todo.length; i++) {
+      const s = todo[i];
+      if (await hasPack(s.id)) continue;
+      status.textContent = `Section ${s.letter} (${s.state}) · ${i + 1} of ${todo.length}…`;
+      fill.style.width = ((i / todo.length) * 100).toFixed(0) + '%';
+      await fetchArchive(s.id, fill, status);
+    }
+    fill.style.width = '100%';
+  } catch (err) {
+    status.textContent = `Stopped (${err.message}). Tap again to resume where it left off.`;
+  }
+  $('btn-basemap').disabled = false;
+  setTimeout(() => { bar.hidden = true; refreshBasemapUI(); renderList(); }, 800);
 }
 async function downloadBasemap() {
   if (await hasPack('overview')) return;
@@ -1187,6 +1256,7 @@ function importSync() {
 function wireUI() {
   $('btn-back').addEventListener('click', closeSection);
   $('btn-basemap').addEventListener('click', downloadBasemap);
+  $('btn-all-packs').addEventListener('click', downloadAllPacks);
   $('btn-nav').addEventListener('click', enterNav);
   $('btn-nav-end').addEventListener('click', exitNav);
   $('dir-nobo').addEventListener('click', () => setDir(1));
