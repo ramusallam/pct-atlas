@@ -443,6 +443,15 @@ footer#install-hint .ic { width: 16px; height: 16px; color: var(--accentBlue); }
   border: 1px solid var(--line);
 }
 .dir-btn.active { background: var(--accentBlue); color: #fff; border-color: var(--accentBlue); }
+.nav-src {
+  display: flex; align-items: center; gap: 8px;
+  border-radius: 10px; font-size: .78rem; font-weight: 600;
+  padding: 8px 12px; margin-bottom: 12px;
+}
+.nav-src .ic { width: 15px; height: 15px; flex-shrink: 0; }
+.nav-src.ondevice { background: rgba(16,185,129,0.12); color: #166534; border: 1px solid rgba(16,185,129,0.3); }
+.nav-src.streaming { background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber-line); }
+
 .nav-offtrail {
   display: flex; align-items: center; gap: 8px;
   background: var(--amber-soft); color: var(--amber);

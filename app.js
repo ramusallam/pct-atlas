@@ -1001,6 +1001,14 @@ function enterNav() {
   $('nav-eyebrow').textContent = `Section ${current.letter} · Navigating`;
   $('nav-mile').textContent = '····';
   $('nav-status').textContent = 'Waiting for GPS…';
+  // show plainly where the map is coming from
+  hasPack(current.id).then((stored) => {
+    const el = $('nav-src');
+    el.className = 'nav-src ' + (stored ? 'ondevice' : 'streaming');
+    el.innerHTML = stored
+      ? '<svg class="ic" viewBox="0 0 24 24"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg> Map stored on this phone. Works with no service.'
+      : '<svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Streaming map. Download this section before you lose service.';
+  });
   document.getElementById('panel').classList.remove('expanded');
   try { geoCtl.trigger(); } catch { }
   clearTimeout(navState.watchdog);
