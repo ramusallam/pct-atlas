@@ -84,10 +84,22 @@ body {
   margin-top: 14px; height: 6px; border-radius: 3px;
   background: rgba(255,255,255,.22); position: relative;
 }
-.hero-bar-fill {
-  height: 100%; width: 0%;
+#hero-spans { position: absolute; inset: 0; }
+.hero-span {
+  position: absolute; top: 0; height: 100%;
   background: linear-gradient(90deg, #fff, #C7D2FE);
-  border-radius: 3px; transition: width .8s cubic-bezier(.22,1,.36,1);
+  border-radius: 3px;
+  box-shadow: 0 0 8px rgba(255,255,255,.55);
+}
+.hero-divider {
+  position: absolute; top: -3px; width: 2px; height: 14px;
+  background: rgba(255,255,255,.65); border-radius: 1px;
+}
+.hero-states { position: relative; height: 14px; margin-top: 3px; }
+.hero-states span {
+  position: absolute; transform: translateX(-50%);
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .22em;
+  opacity: .75;
 }
 #hero-ticks { position: absolute; inset: 0; pointer-events: none; }
 .hero-tick {
@@ -97,8 +109,29 @@ body {
 .hero-tick.passed { background: #fff; }
 .hero-next {
   font-family: var(--font-mono); font-size: 11px;
-  letter-spacing: .08em; opacity: .85; margin-top: 7px;
+  letter-spacing: .08em; opacity: .85; margin-top: 3px;
   font-variant-numeric: tabular-nums;
+}
+
+.basemap-card {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--bgCard);
+  border: 1px solid var(--borderColor);
+  border-radius: 14px;
+  padding: 12px 14px; margin-bottom: 14px;
+  box-shadow: var(--shadow-sm);
+  animation: fadeUp .35s ease-out;
+}
+.basemap-ic { color: var(--accentBlue); width: 20px; height: 20px; }
+.basemap-info { flex: 1; min-width: 0; }
+.basemap-title { font-weight: 700; font-size: .84rem; color: var(--textWarm); }
+.basemap-sub { font-size: .72rem; color: var(--textWarmSecondary); }
+#btn-basemap.stored { background: var(--accentGreen); }
+.basemap-bar { flex-basis: 100%; margin-top: 2px; }
+
+.ring {
+  padding: 3px; border-radius: 13px; flex-shrink: 0;
+  background: conic-gradient(var(--accentGreen) var(--p, 0deg), var(--borderSubtle) 0deg);
 }
 
 .sheet-handle { display: none; }

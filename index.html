@@ -29,7 +29,10 @@
         <div class="stat"><span class="num" id="stat-pct">0%</span><span class="lbl">of trail</span></div>
         <div class="stat"><span class="num" id="stat-secs">0/29</span><span class="lbl">sections</span></div>
       </div>
-      <div class="hero-bar"><div class="hero-bar-fill" id="hero-bar-fill"></div><div id="hero-ticks"></div></div>
+      <div class="hero-bar"><div id="hero-spans"></div><div id="hero-ticks"></div></div>
+      <div class="hero-states">
+        <span style="left:32.4%">CA</span><span style="left:72.9%">OR</span><span style="left:90.5%">WA</span>
+      </div>
       <div class="hero-next" id="hero-next"></div>
     </header>
 
@@ -44,6 +47,15 @@
           <button class="state-tab" data-state="CA">California</button>
           <button class="state-tab" data-state="OR">Oregon</button>
           <button class="state-tab" data-state="WA">Washington</button>
+        </div>
+        <div class="basemap-card" id="basemap-card" hidden>
+          <svg class="ic basemap-ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <div class="basemap-info">
+            <div class="basemap-title">Whole-trail base map</div>
+            <div class="basemap-sub" id="basemap-status">One download and the whole-trail map lives on this phone.</div>
+          </div>
+          <button class="btn primary tiny" id="btn-basemap"><span id="basemap-label">Download</span></button>
+          <div class="pack-progress basemap-bar" id="basemap-progress" hidden><div class="pack-progress-fill" id="basemap-progress-fill"></div></div>
         </div>
         <div class="list-tools">
           <span class="eyebrow">29 sections · Mexico → Canada</span>

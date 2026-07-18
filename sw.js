@@ -1,8 +1,8 @@
 /* PCT Atlas service worker — offline app shell + section data + tile-pack range serving */
 'use strict';
 
-const SHELL_CACHE = 'pct-shell-v5';
-const RUNTIME_CACHE = 'pct-runtime-v5';
+const SHELL_CACHE = 'pct-shell-v6';
+const RUNTIME_CACHE = 'pct-runtime-v6';
 const PACK_CACHE = 'pct-packs-v1'; // written by the page, served here — never purge on upgrade
 
 const SECTION_IDS = [
@@ -19,7 +19,7 @@ const SHELL = [
   'assets/basemap-layers.json',
   'assets/sprites/light.json', 'assets/sprites/light.png', 'assets/sprites/light@2x.json', 'assets/sprites/light@2x.png',
   'assets/icons/icon-192.png', 'assets/icons/icon-512.png', 'assets/icons/apple-touch-icon.png',
-  'data/pct-overview.json', 'data/sections-index.json',
+  'data/pct-overview.json', 'data/sections-index.json', 'data/packs.json',
   ...SECTION_IDS.map((id) => 'data/sections/' + id + '.json'),
   ...FONT_FACES.flatMap((f) => FONT_RANGES.map((r) => 'assets/fonts/' + encodeURIComponent(f) + '/' + r + '.pbf')),
 ];

@@ -6,8 +6,9 @@ const TILES = {
   overview: BASE + 'tiles/overview.pmtiles',
   section: (id) => BASE + 'tiles/' + id + '.pmtiles',
 };
-// Sections with a published offline tile pack
-const PACKS = { CA_K: 16393751 };
+// Published offline tile packs {id: bytes}, loaded from data/packs.json at boot ('overview' = base map)
+let PACKS = {};
+const packUrl = (id) => (id === 'overview' ? TILES.overview : TILES.section(id));
 const PACK_CACHE = 'pct-packs-v1';
 const STATE_LABEL = { CA: 'California', OR: 'Oregon', WA: 'Washington' };
 const KIND_COLORS = { water: '#0EA5E9', camp: '#10b981', road: '#f59e0b', landmark: '#A0937B' };
@@ -205,9 +206,11 @@ function doneSlicesGeo() {
   }
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
-  const [layersRes, indexRes, overviewRes] = await Promise.all([
+  const [layersRes, indexRes, overviewRes, packsRes] = await Promise.all([
     fetch('assets/basemap-layers.json'), fetch('data/sections-index.json'), fetch('data/pct-overview.json'),
+    fetch('data/packs.json').catch(() => null),
   ]);
+  try { if (packsRes) PACKS = await packsRes.json(); } catch { }
   basemapLayers = await layersRes.json();
   const idx = await indexRes.json();
   index = idx.sections || idx; // tolerate old cached shape
@@ -281,6 +284,7 @@ function doneSlicesGeo() {
   renderList();
   wireUI();
   updateOnline();
+  refreshBasemapUI();
 })();
 
 /* ================= map styles ================= */
@@ -541,7 +545,7 @@ function renderStats(animate) {
       else displayed = target;
     })(t0);
   }
-  $('hero-bar-fill').style.width = Math.max(pct, miles > 0 ? 1.2 : 0) + '%';
+  renderHeroSpans();
   document.querySelectorAll('.hero-tick').forEach((el) => {
     el.classList.toggle('passed', miles >= Number(el.dataset.mile));
   });
@@ -555,6 +559,27 @@ function applyStats(v) {
   $('stat-pct').textContent = v.pct.toFixed(1) + '%';
   $('stat-secs').textContent = `${v.secs}/29`;
 }
+// draw the actual covered stretches on the hero bar: your hike, to scale
+function renderHeroSpans() {
+  const wrap = $('hero-spans');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  for (const [a, b] of progress) {
+    const el = document.createElement('div');
+    el.className = 'hero-span';
+    el.style.left = (a / TOTAL * 100) + '%';
+    el.style.width = Math.max((b - a) / TOTAL * 100, 0.35) + '%';
+    wrap.appendChild(el);
+  }
+  // state boundary dividers
+  for (const m of [1720.4, 2150.3]) {
+    const d = document.createElement('div');
+    d.className = 'hero-divider';
+    d.style.left = (m / TOTAL * 100) + '%';
+    wrap.appendChild(d);
+  }
+}
+
 function buildHeroTicks() {
   const wrap = $('hero-ticks');
   wrap.innerHTML = '';
@@ -594,8 +619,9 @@ function renderList() {
       : cov.covered > EPS
         ? `${fmt1(s.miles)} mi · ${fmt1(cov.covered)} mi logged`
         : `${fmt1(s.miles)} mi · +${fmt(s.gainFt)} ft`;
+    const frac = cov.done ? 1 : Math.min(1, cov.covered / cov.span);
     row.innerHTML = `
-      <div class="letter">${s.letter}</div>
+      <div class="ring" style="--p:${(frac * 360).toFixed(1)}deg"><div class="letter">${s.letter}</div></div>
       <div class="meta">
         <div class="name">${esc(s.from)} → ${esc(s.to)}</div>
         <div class="sub">${sub}</div>
@@ -1036,7 +1062,28 @@ function nextToast() {
 async function hasPack(id) {
   if (!('caches' in window)) return false;
   const cache = await caches.open(PACK_CACHE);
-  return !!(await cache.match(TILES.section(id)));
+  return !!(await cache.match(packUrl(id)));
+}
+
+// stream a tile archive to a blob with progress, store in the pack cache
+async function fetchArchive(id, fill, statusEl) {
+  const url = packUrl(id);
+  const res = await fetch(url, { cache: 'no-store', headers: { 'x-pack-download': '1' } });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const total = Number(res.headers.get('content-length')) || PACKS[id] || 0;
+  const reader = res.body.getReader();
+  const chunks = []; let got = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value); got += value.length;
+    if (total) fill.style.width = Math.min(100, (got / total) * 100).toFixed(1) + '%';
+    statusEl.textContent = `Downloading… ${(got / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(0)} MB`;
+  }
+  const blob = new Blob(chunks);
+  const cache = await caches.open(PACK_CACHE);
+  await cache.put(url, new Response(blob, { headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(blob.size) } }));
+  return blob;
 }
 async function refreshPackUI() {
   if (!current) return;
@@ -1063,25 +1110,10 @@ async function refreshPackUI() {
 async function downloadPack() {
   if (!current || !PACKS[current.id]) return;
   const id = current.id;
-  const url = TILES.section(id);
   const btn = $('btn-pack'), bar = $('pack-progress'), fill = $('pack-progress-fill'), status = $('pack-status');
   btn.disabled = true; bar.hidden = false; fill.style.width = '0%';
   try {
-    const res = await fetch(url, { cache: 'no-store', headers: { 'x-pack-download': '1' } });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const total = Number(res.headers.get('content-length')) || PACKS[id];
-    const reader = res.body.getReader();
-    const chunks = []; let got = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value); got += value.length;
-      fill.style.width = Math.min(100, (got / total) * 100).toFixed(1) + '%';
-      status.textContent = `Downloading… ${(got / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(0)} MB`;
-    }
-    const blob = new Blob(chunks);
-    const cache = await caches.open(PACK_CACHE);
-    await cache.put(url, new Response(blob, { headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(blob.size) } }));
+    await fetchArchive(id, fill, status);
     fill.style.width = '100%';
     map.setStyle(sectionStyle(current, TILES.section(id)));
   } catch (err) {
@@ -1089,6 +1121,33 @@ async function downloadPack() {
   }
   btn.disabled = false;
   setTimeout(() => { bar.hidden = true; refreshPackUI(); }, 600);
+}
+
+/* ---- whole-trail base map pack ---- */
+async function refreshBasemapUI() {
+  const card = $('basemap-card');
+  if (!card) return;
+  if (!PACKS.overview) { card.hidden = true; return; }
+  card.hidden = false;
+  const stored = await hasPack('overview');
+  $('basemap-label').textContent = stored ? 'Stored ✓' : `Download (${(PACKS.overview / 1048576).toFixed(0)} MB)`;
+  $('btn-basemap').classList.toggle('stored', stored);
+  $('basemap-status').textContent = stored
+    ? 'On this phone. The whole-trail map works with no service.'
+    : 'One download and the whole-trail map lives on this phone.';
+}
+async function downloadBasemap() {
+  if (await hasPack('overview')) return;
+  const btn = $('btn-basemap'), bar = $('basemap-progress'), fill = $('basemap-progress-fill'), status = $('basemap-status');
+  btn.disabled = true; bar.hidden = false; fill.style.width = '0%';
+  try {
+    await fetchArchive('overview', fill, status);
+    if (mode === 'list') map.setStyle(overviewStyle());
+  } catch (err) {
+    status.textContent = `Download failed (${err.message}). Try again on wifi.`;
+  }
+  btn.disabled = false;
+  setTimeout(() => { bar.hidden = true; refreshBasemapUI(); }, 600);
 }
 
 /* ================= sync ================= */
@@ -1127,6 +1186,7 @@ function importSync() {
 /* ================= ui wiring ================= */
 function wireUI() {
   $('btn-back').addEventListener('click', closeSection);
+  $('btn-basemap').addEventListener('click', downloadBasemap);
   $('btn-nav').addEventListener('click', enterNav);
   $('btn-nav-end').addEventListener('click', exitNav);
   $('dir-nobo').addEventListener('click', () => setDir(1));
