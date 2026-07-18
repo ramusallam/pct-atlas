@@ -105,6 +105,25 @@ body {
 
 #panel-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 16px; -webkit-overflow-scrolling: touch; }
 
+.state-tabs {
+  position: sticky; top: -16px; z-index: 5;
+  display: flex; gap: 8px;
+  background: var(--bgMain);
+  padding: 4px 0 10px;
+  margin-top: -6px;
+}
+.state-tab {
+  flex: 1;
+  font-family: var(--font-mono); font-weight: 700; font-size: .72rem;
+  letter-spacing: .08em; text-transform: uppercase;
+  padding: 9px 4px; border-radius: 10px; cursor: pointer;
+  background: var(--bgCard); color: var(--textWarmSecondary);
+  border: 1px solid var(--line);
+  transition: transform .15s, box-shadow .15s;
+}
+.state-tab:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.state-tab.active { background: var(--accentBlue); color: #fff; border-color: var(--accentBlue); }
+
 .list-tools {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 10px;

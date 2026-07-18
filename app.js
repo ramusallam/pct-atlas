@@ -579,6 +579,7 @@ function renderList() {
       lastState = s.state;
       const h = document.createElement('div');
       h.className = 'state-head';
+      h.id = 'state-head-' + s.state;
       h.textContent = STATE_LABEL[s.state];
       wrap.appendChild(h);
     }
@@ -1150,6 +1151,25 @@ function wireUI() {
 
   const panel = $('panel');
   $('sheet-handle').addEventListener('click', () => panel.classList.toggle('expanded'));
+
+  document.querySelectorAll('.state-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const st = tab.dataset.state;
+      document.querySelectorAll('.state-tab').forEach((t) => t.classList.toggle('active', t === tab));
+      if (window.matchMedia('(max-width: 760px)').matches) panel.classList.add('expanded');
+      const head = $('state-head-' + st);
+      if (head) head.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // fly the map to that state's stretch of trail
+      const secs = index.filter((s) => s.state === st);
+      if (secs.length && mode === 'list') {
+        const b = secs.reduce((acc, s) => [
+          Math.min(acc[0], s.bbox[0]), Math.min(acc[1], s.bbox[1]),
+          Math.max(acc[2], s.bbox[2]), Math.max(acc[3], s.bbox[3]),
+        ], [Infinity, Infinity, -Infinity, -Infinity]);
+        map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 40, duration: 900 });
+      }
+    });
+  });
 
   window.addEventListener('online', updateOnline);
   window.addEventListener('offline', updateOnline);
