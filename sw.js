@@ -1,8 +1,8 @@
 /* PCT Atlas service worker — offline app shell + section data + tile-pack range serving */
 'use strict';
 
-const SHELL_CACHE = 'pct-shell-v8';
-const RUNTIME_CACHE = 'pct-runtime-v8';
+const SHELL_CACHE = 'pct-shell-v9';
+const RUNTIME_CACHE = 'pct-runtime-v9';
 const PACK_CACHE = 'pct-packs-v1'; // written by the page, served here — never purge on upgrade
 
 const SECTION_IDS = [
@@ -61,7 +61,22 @@ self.addEventListener('fetch', (e) => {
 
   if (url.origin !== location.origin || e.request.method !== 'GET') return;
 
-  // App shell + data: cache-first, network fallback (and refresh cache when online)
+  // Data files: serve cached instantly, refresh the cache in the background
+  // so new packs/section data reach installed clients without a version bump
+  if (url.pathname.includes('/data/')) {
+    e.respondWith(
+      caches.open(SHELL_CACHE).then(async (c) => {
+        const hit = await c.match(e.request, { ignoreSearch: true });
+        const revalidate = fetch(e.request)
+          .then((res) => { if (res.ok) c.put(e.request, res.clone()); return res; })
+          .catch(() => hit);
+        return hit || revalidate;
+      })
+    );
+    return;
+  }
+
+  // App shell: cache-first, network fallback
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then((hit) => {
       if (hit) return hit;

@@ -52,11 +52,10 @@
           <svg class="ic basemap-ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           <div class="basemap-info">
             <div class="basemap-title">Offline maps</div>
-            <div class="basemap-sub" id="basemap-status">One download and the whole-trail map lives on this phone.</div>
+            <div class="basemap-sub" id="basemap-status"></div>
           </div>
-          <button class="btn primary tiny" id="btn-basemap"><span id="basemap-label">Download</span></button>
+          <button class="btn primary" id="btn-basemap"><span id="basemap-label">Download</span></button>
           <div class="pack-progress basemap-bar" id="basemap-progress" hidden><div class="pack-progress-fill" id="basemap-progress-fill"></div></div>
-          <button class="btn ghost tiny basemap-all" id="btn-all-packs"><span id="all-packs-label">Download every section for offline use</span></button>
         </div>
         <div class="list-tools">
           <span class="eyebrow">29 sections · Mexico → Canada</span>
@@ -81,7 +80,6 @@
           <div class="chips">
             <span class="chip" id="chip-miles">63 mi</span>
             <span class="chip" id="chip-gain">+12,200 ft</span>
-            <span class="chip" id="chip-span">mile 1093.5 → 1158.2</span>
             <span class="chip partial-chip" id="chip-progress" hidden></span>
             <span class="chip done-chip" id="chip-done" hidden>
               <svg class="ic" viewBox="0 0 24 24"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
@@ -115,7 +113,7 @@
           <div class="logger" id="logger" hidden>
             <div class="logger-head">
               <span class="eyebrow">Log a stretch</span>
-              <span class="logger-hint">Drag the handles. They snap to landmarks.</span>
+              <span class="logger-hint" id="logger-hint">Drag the handles. They snap to landmarks.</span>
             </div>
             <div class="range" id="range">
               <div class="range-track">
@@ -155,8 +153,8 @@
               <div class="nav-mile"><span id="nav-mile">····</span><span class="nav-mile-unit">trail mile</span></div>
             </div>
             <div class="nav-dir" role="group" aria-label="Direction of travel">
-              <button class="dir-btn active" id="dir-nobo" title="Northbound">N ↑</button>
-              <button class="dir-btn" id="dir-sobo" title="Southbound">S ↓</button>
+              <button class="dir-btn active" id="dir-nobo" title="Northbound"><svg class="ic" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>NOBO</button>
+              <button class="dir-btn" id="dir-sobo" title="Southbound"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>SOBO</button>
             </div>
           </div>
           <div class="nav-src" id="nav-src"></div>
@@ -218,6 +216,7 @@
     <h3>Move progress between devices</h3>
     <p>Copy this code on one device, paste it on the other.</p>
     <textarea id="sync-code" rows="3" spellcheck="false"></textarea>
+    <div class="sync-warn" id="sync-warn" hidden>That code did not parse. Paste it exactly from your other device.</div>
     <div class="sec-actions">
       <button class="btn primary" id="btn-copy-code">Copy my code</button>
       <button class="btn ghost" id="btn-import-code">Import pasted code</button>

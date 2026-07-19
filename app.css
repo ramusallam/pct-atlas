@@ -128,7 +128,15 @@ body {
 .basemap-sub { font-size: .72rem; color: var(--textWarmSecondary); }
 #btn-basemap.stored { background: var(--accentGreen); }
 .basemap-bar { flex-basis: 100%; margin-top: 2px; }
-.basemap-all { flex-basis: 100%; justify-content: center; }
+.basemap-card.done { padding: 9px 14px; box-shadow: none; }
+.basemap-card .ok, .pack-status .ok { display: inline-flex; align-items: center; gap: 5px; }
+.basemap-card .ok .ic, .pack-status .ok .ic { width: 13px; height: 13px; }
+.btn.arming { background: var(--amber-soft); color: var(--amber); border-color: var(--amber-line); }
+.sync-warn {
+  font-size: .78rem; color: var(--amber); background: var(--amber-soft);
+  border: 1px solid var(--amber-line); border-radius: 8px;
+  padding: 8px 10px; margin: -4px 0 12px;
+}
 
 .sec-weather {
   font-family: var(--font-mono); font-size: .7rem;
@@ -163,7 +171,6 @@ body {
   transition: transform .15s, box-shadow .15s;
 }
 .state-tab:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
-.state-tab.active { background: var(--accentBlue); color: #fff; border-color: var(--accentBlue); }
 
 .list-tools {
   display: flex; align-items: center; justify-content: space-between;
@@ -202,10 +209,6 @@ body {
 .sec-row.partial .letter {
   background: var(--indigo-soft); color: var(--accentBlue);
   box-shadow: inset 0 0 0 2px var(--accentGreen);
-}
-.letter.pulse { animation: letterPulse .3s ease-out; }
-@keyframes letterPulse {
-  0% { transform: scale(1); } 50% { transform: scale(1.12); } 100% { transform: scale(1); }
 }
 .sec-row .meta { flex: 1; min-width: 0; }
 .sec-row .name {
@@ -283,7 +286,6 @@ body {
 .btn:active { transform: translateY(0); }
 .btn.primary { background: var(--accentBlue); color: #fff; }
 .btn.primary:hover { background: var(--accentBlueHover); }
-.btn.primary.completed { background: var(--accentGreen); }
 .btn.ghost { background: var(--bgCard); color: var(--textWarm); border-color: var(--line); }
 .btn.tiny { padding: 6px 10px; font-size: .76rem; border-radius: 8px; }
 .btn[disabled] { opacity: .5; pointer-events: none; }
@@ -312,7 +314,7 @@ body {
 #map { position: absolute; inset: 0; background: #EDE7DC; }
 
 #offline-badge {
-  position: absolute; top: 12px; left: 12px; z-index: 10;
+  position: absolute; top: calc(12px + env(safe-area-inset-top)); left: 12px; z-index: 10;
   display: inline-flex; align-items: center; gap: 6px;
   background: var(--amber-soft); color: var(--amber);
   border: 1px solid var(--amber-line);
@@ -337,6 +339,7 @@ body {
 
 footer#install-hint {
   flex-shrink: 0;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
   display: flex; align-items: center; gap: 8px;
   padding: 10px 16px;
   font-size: .76rem; color: var(--textWarmSecondary);
@@ -383,7 +386,6 @@ footer#install-hint .ic { width: 16px; height: 16px; color: var(--accentBlue); }
 .range-fill { position: absolute; top: 0; height: 100%; background: rgba(99,102,241,.35); border-top: 2px solid var(--accentBlue); }
 .range-ticks { position: absolute; top: 23px; left: 0; right: 0; height: 6px; pointer-events: none; }
 .range-tick { position: absolute; width: 1px; height: 6px; background: var(--textWarmMuted); }
-.range-tick.snapped { background: var(--accentBlue); width: 2px; }
 .range-handle {
   position: absolute; top: -5px; width: 44px; height: 44px; margin-left: -22px;
   background: none; border: none; cursor: grab; display: grid; place-items: center;
@@ -437,12 +439,14 @@ footer#install-hint .ic { width: 16px; height: 16px; color: var(--accentBlue); }
 }
 .nav-dir { display: flex; gap: 6px; flex-shrink: 0; }
 .dir-btn {
+  display: inline-flex; align-items: center; gap: 5px;
   font-family: var(--font-mono); font-weight: 700; font-size: .78rem;
   padding: 8px 12px; border-radius: 10px; cursor: pointer;
   background: var(--bgCard); color: var(--textWarmSecondary);
   border: 1px solid var(--line);
 }
 .dir-btn.active { background: var(--accentBlue); color: #fff; border-color: var(--accentBlue); }
+.dir-btn .ic { width: 13px; height: 13px; }
 .nav-src {
   display: flex; align-items: center; gap: 8px;
   border-radius: 10px; font-size: .78rem; font-weight: 600;
@@ -520,7 +524,6 @@ footer#install-hint .ic { width: 16px; height: 16px; color: var(--accentBlue); }
 
 @media (prefers-reduced-motion: reduce) {
   .range-handle::after { transition: none; }
-  .hero-bar-fill { transition: none; }
   .toast, .logger, .sec-row, .sec-card { animation: none; }
 }
 
@@ -543,9 +546,9 @@ footer#install-hint .ic { width: 16px; height: 16px; color: var(--accentBlue); }
   .stat .num { font-size: 1rem; }
   .hero-bar { margin-top: 8px; }
   .sheet-handle {
-    display: grid; place-items: center;
-    position: absolute; top: 0; left: 0; right: 0; height: 12px; z-index: 5;
-    cursor: grab;
+    display: grid; place-items: start center;
+    position: absolute; top: 0; left: 0; right: 0; height: 34px; z-index: 5;
+    cursor: pointer;
   }
   .handle-pill {
     width: 44px; height: 5px; border-radius: 3px;
@@ -553,5 +556,23 @@ footer#install-hint .ic { width: 16px; height: 16px; color: var(--accentBlue); }
   }
   #map-wrap { flex: 1; min-height: 0; }
   footer#install-hint { padding: 8px 14px; font-size: .7rem; }
-  #toast-root { bottom: auto; top: 12px; }
+  #toast-root { bottom: auto; top: calc(12px + env(safe-area-inset-top)); }
+  #panel-body { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .btn, .state-tab, .dir-btn { min-height: 44px; }
+  .legend label { padding: 8px 0; }
+  .sec-row .sub, .basemap-sub, .pack-status, .nav-status, .logger-hint { font-size: .78rem; }
+  .nav-row .nav-label { font-size: .74rem; }
+  .nav-src { font-size: .82rem; }
+  /* put the actions where a thumb can reach them without scrolling */
+  .sec-card { display: flex; flex-direction: column; }
+  .sec-card > .eyebrow { order: 0; }
+  .sec-card > h2 { order: 1; }
+  .sec-card > .sec-weather { order: 2; }
+  .sec-card > .chips { order: 3; }
+  .sec-card > .sec-actions { order: 4; margin-bottom: 12px; }
+  .sec-card > #elev { order: 5; }
+  .sec-card > .legend { order: 6; }
+  .sec-card > .logger { order: 7; }
+  .sec-card > .pack-progress { order: 8; }
+  .sec-card > .pack-status { order: 9; }
 }

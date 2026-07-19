@@ -6,9 +6,15 @@ const TILES = {
   overview: BASE + 'tiles/overview.pmtiles',
   section: (id) => BASE + 'tiles/' + id + '.pmtiles',
 };
-// Published offline tile packs {id: bytes}, loaded from data/packs.json at boot ('overview' = base map)
+// Published offline tile packs {id: bytes}, loaded from data/packs.json at boot ('overview' = trail map)
 let PACKS = {};
 const packUrl = (id) => (id === 'overview' ? TILES.overview : TILES.section(id));
+const storedPacks = new Set(); // pack ids downloaded to this device, seeded from the cache at boot
+let downloading = false; // one download at a time, across every entry point
+let openSeq = 0; // guards openSection against fast double-taps
+
+const ICON_DOWNLOAD = '<svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+const ICON_CHECK = '<svg class="ic" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>';
 const PACK_CACHE = 'pct-packs-v1';
 const STATE_LABEL = { CA: 'California', OR: 'Oregon', WA: 'Washington' };
 const KIND_COLORS = { water: '#0EA5E9', camp: '#10b981', road: '#f59e0b', landmark: '#A0937B' };
@@ -132,7 +138,11 @@ function loadProgress() {
 }
 function saveProgress(silent) {
   localStorage.setItem('pct-progress-v2', JSON.stringify({ v: 2, intervals: progress }));
-  if (!silent) { renderStats(true); renderList(); refreshOverviewProgress(); }
+  if (!silent) {
+    renderStats(true);
+    if (mode === 'list') renderList(); // hidden list re-renders on closeSection instead
+    refreshOverviewProgress();
+  }
 }
 
 /* ================= geometry: slice a mile-annotated line ================= */
@@ -217,6 +227,12 @@ function doneSlicesGeo() {
     fetch('data/packs.json').catch(() => null),
   ]);
   try { if (packsRes) PACKS = await packsRes.json(); } catch { }
+  try {
+    const cache = await caches.open(PACK_CACHE);
+    for (const req of await cache.keys()) {
+      storedPacks.add(req.url.split('/').pop().replace('.pmtiles', ''));
+    }
+  } catch { }
   basemapLayers = await layersRes.json();
   const idx = await indexRes.json();
   index = idx.sections || idx; // tolerate old cached shape
@@ -468,6 +484,7 @@ function refreshSectionDone() {
 async function openSection(id) {
   const meta = index.find((s) => s.id === id);
   if (!meta) return;
+  const seq = ++openSeq;
   if (!sectionCache[id]) {
     try {
       let sec = await (await fetch('data/sections/' + id + '.json')).json();
@@ -482,8 +499,10 @@ async function openSection(id) {
       sectionCache[id] = sec;
     } catch { return; }
   }
+  if (seq !== openSeq) return; // a newer tap superseded this one while data loaded
   current = sectionCache[id];
   mode = 'section';
+  if (window.matchMedia('(max-width: 760px)').matches) $('panel').classList.add('expanded');
 
   const archive = PACKS[id] ? TILES.section(id) : TILES.overview;
   map.setStyle(sectionStyle(current, archive));
@@ -498,7 +517,6 @@ async function openSection(id) {
   $('sec-title').textContent = `${current.from} → ${current.to}`;
   $('chip-miles').textContent = `${fmt1(current.miles)} mi`;
   $('chip-gain').textContent = `+${fmt(current.gainFt)} ft`;
-  $('chip-span').textContent = `mile ${fmt1(current.mileStart)} → ${fmt1(current.mileEnd)}`;
   closeLogger();
   renderSectionState();
   refreshPackUI();
@@ -510,10 +528,12 @@ function closeSection() {
   if (navState.active) exitNav();
   mode = 'list'; current = null;
   closeLogger();
+  $('panel').classList.remove('expanded');
   map.setStyle(overviewStyle());
   map.fitBounds([[-124.8, 32.4], [-116.6, 49.1]], { padding: 40, duration: 1000 });
   $('view-list').hidden = false;
   $('view-section').hidden = true;
+  renderList(); // list may be stale: renders are skipped while it is hidden
 }
 
 function renderSectionState() {
@@ -522,7 +542,7 @@ function renderSectionState() {
   $('chip-done').hidden = !cov.done;
   if (cov.done) $('chip-done-date').textContent = sectionDate(current) || 'complete';
   $('chip-progress').hidden = !(cov.covered > EPS && !cov.done);
-  if (!$('chip-progress').hidden) $('chip-progress').textContent = `${fmt1(cov.covered)} / ${fmt1(cov.span)} mi`;
+  if (!$('chip-progress').hidden) $('chip-progress').textContent = `${fmt1(cov.covered)} of ${fmt1(cov.span)} mi`;
   $('btn-log').hidden = cov.done;
   $('btn-clear').hidden = cov.covered <= EPS;
   drawElevation();
@@ -624,7 +644,7 @@ function renderList() {
     const sub = cov.done
       ? `${fmt1(s.miles)} mi · +${fmt(s.gainFt)} ft${sectionDate(s) ? ' · ' + sectionDate(s) : ''}`
       : cov.covered > EPS
-        ? `${fmt1(s.miles)} mi · ${fmt1(cov.covered)} mi logged`
+        ? `${fmt1(cov.covered)} of ${fmt1(s.miles)} mi`
         : `${fmt1(s.miles)} mi · +${fmt(s.gainFt)} ft`;
     const frac = cov.done ? 1 : Math.min(1, cov.covered / cov.span);
     row.innerHTML = `
@@ -634,7 +654,7 @@ function renderList() {
         <div class="sub">${sub}</div>
       </div>
       <div class="flags">
-        ${PACKS[s.id] ? '<svg class="ic badge-pack" viewBox="0 0 24 24" aria-label="Offline pack available"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' : ''}
+        ${hasPack(s.id) ? ICON_DOWNLOAD.replace('class="ic"', 'class="ic badge-pack" aria-label="Offline map downloaded"') : ''}
         ${cov.done ? '<svg class="ic badge-done" viewBox="0 0 24 24" aria-label="Completed"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>' : ''}
       </div>`;
     row.addEventListener('click', () => openSection(s.id));
@@ -644,15 +664,24 @@ function renderList() {
 }
 
 /* ================= elevation (with covered + selection shading) ================= */
+let elevRaf = 0;
 function drawElevation() {
+  // coalesce redraws (logger drags fire per pointermove)
+  if (elevRaf) return;
+  elevRaf = requestAnimationFrame(() => { elevRaf = 0; drawElevationNow(); });
+}
+function drawElevationNow() {
   const cv = $('elev'), ctx = cv.getContext('2d');
   const W = cv.width, H = cv.height;
   ctx.clearRect(0, 0, W, H);
   const profile = current && current.elevProfile;
   if (!profile || profile.length < 2) return;
   const x0 = current.mileStart, x1 = current.mileEnd;
-  const ys = profile.map((p) => p[1]);
-  const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  if (!current.__elev) {
+    const ys = profile.map((p) => p[1]);
+    current.__elev = { yMin: Math.min(...ys), yMax: Math.max(...ys) };
+  }
+  const { yMin, yMax } = current.__elev;
   const px = (m) => 8 + ((m - x0) / (x1 - x0)) * (W - 16);
   const py = (y) => H - 14 - ((y - yMin) / Math.max(yMax - yMin, 1)) * (H - 30);
 
@@ -695,7 +724,7 @@ function drawElevation() {
   ctx.fillStyle = '#7C6F5A';
   ctx.font = '700 11px "Roboto Mono", monospace';
   ctx.fillText(`${fmt(Math.round(yMax * 3.281))} ft`, 8, 12);
-  ctx.fillText(`${fmt(Math.round(yMin * 3.281))} ft`, 8, H - 3);
+  ctx.fillText(`mile ${fmt1(x0)}`, 8, H - 3);
   ctx.textAlign = 'right';
   ctx.fillText(`mile ${fmt1(x1)}`, W - 8, H - 3);
   ctx.textAlign = 'left';
@@ -732,6 +761,7 @@ function openLogger() {
   logSel.a = target[0]; logSel.b = target[1];
   snapPoints = landmarksFor(current);
   buildLoggerStatic();
+  $('logger-hint').hidden = !!localStorage.getItem('pct-hint-drag');
   $('logger').hidden = false;
   $('btn-log').hidden = true;
   if (window.matchMedia('(max-width: 760px)').matches) $('panel').classList.add('expanded');
@@ -815,6 +845,11 @@ function setHandle(which, mile, snap) {
   else logSel.b = Math.max(m, logSel.a + 0.1);
   renderLogger();
 }
+function markHintSeen() {
+  if (localStorage.getItem('pct-hint-drag')) return;
+  localStorage.setItem('pct-hint-drag', '1');
+  $('logger-hint').hidden = true;
+}
 function wireLogger() {
   const range = $('range');
   const mileFromEvent = (ev) => {
@@ -827,10 +862,17 @@ function wireLogger() {
     el.addEventListener('pointerdown', (ev) => {
       ev.preventDefault();
       el.setPointerCapture(ev.pointerId);
-      const move = (e2) => { e2.preventDefault(); setHandle(which, mileFromEvent(e2), true); };
-      const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); };
+      const move = (e2) => { e2.preventDefault(); setHandle(which, mileFromEvent(e2), true); markHintSeen(); };
+      const end = () => {
+        el.removeEventListener('pointermove', move);
+        el.removeEventListener('pointerup', end);
+        el.removeEventListener('pointercancel', end);
+        el.removeEventListener('lostpointercapture', end);
+      };
       el.addEventListener('pointermove', move);
-      el.addEventListener('pointerup', up);
+      el.addEventListener('pointerup', end);
+      el.addEventListener('pointercancel', end);
+      el.addEventListener('lostpointercapture', end);
     });
     el.addEventListener('keydown', (ev) => {
       const step = ev.shiftKey ? 1.0 : 0.1;
@@ -878,9 +920,25 @@ function confirmLog() {
   queueToasts(toasts);
 }
 
+let clearArmed = null;
 function clearSection() {
   if (!current) return;
-  if (!confirm(`Clear all logged miles in Section ${current.letter}? Stretches that cross into neighboring sections are trimmed to this section.`)) return;
+  const btn = $('btn-clear');
+  // two-tap confirm, no OS dialog: first tap arms, second within 3s clears
+  if (!clearArmed) {
+    btn.textContent = `Tap again to clear Section ${current.letter}`;
+    btn.classList.add('arming');
+    clearArmed = setTimeout(() => {
+      clearArmed = null;
+      btn.textContent = 'Clear logged miles';
+      btn.classList.remove('arming');
+    }, 3000);
+    return;
+  }
+  clearTimeout(clearArmed);
+  clearArmed = null;
+  btn.textContent = 'Clear logged miles';
+  btn.classList.remove('arming');
   subtractInterval(current.mileStart, current.mileEnd);
   saveProgress();
   renderSectionState();
@@ -900,9 +958,12 @@ async function loadWeather(sec) {
       const mid = coords[Math.floor(coords.length / 2)];
       const pt = await (await fetch(`https://api.weather.gov/points/${mid[1].toFixed(4)},${mid[0].toFixed(4)}`)).json();
       const fc = await (await fetch(pt.properties.forecast)).json();
-      weatherCache[id] = fc.properties.periods.slice(0, 4).map((p) =>
-        `${p.name.length > 9 ? p.name.slice(0, 3) : p.name} ${p.temperature}° ${p.shortForecast.split(' then ')[0]}`
-      );
+      weatherCache[id] = fc.properties.periods.slice(0, 3).map((p) => {
+        let sky = p.shortForecast.split(' then ')[0]
+          .replace(/^(Slight |Chance )+/i, '').replace('Showers And Thunderstorms', 'T-storms');
+        if (sky.length > 16) sky = sky.slice(0, 15).trimEnd() + '…';
+        return `${p.name.length > 9 ? p.name.slice(0, 3) : p.name} ${p.temperature}° ${sky}`;
+      });
     }
     if (current && current.id === id) {
       el.textContent = weatherCache[id].join('  ·  ');
@@ -1002,13 +1063,12 @@ function enterNav() {
   $('nav-mile').textContent = '····';
   $('nav-status').textContent = 'Waiting for GPS…';
   // show plainly where the map is coming from
-  hasPack(current.id).then((stored) => {
-    const el = $('nav-src');
-    el.className = 'nav-src ' + (stored ? 'ondevice' : 'streaming');
-    el.innerHTML = stored
-      ? '<svg class="ic" viewBox="0 0 24 24"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg> Map stored on this phone. Works with no service.'
-      : '<svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Streaming map. Download this section before you lose service.';
-  });
+  const stored = hasPack(current.id);
+  const srcEl = $('nav-src');
+  srcEl.className = 'nav-src ' + (stored ? 'ondevice' : 'streaming');
+  srcEl.innerHTML = stored
+    ? `${ICON_CHECK} Offline map downloaded. Works with no service.`
+    : `${ICON_DOWNLOAD} Streaming. Download this section's offline map before you lose service.`;
   document.getElementById('panel').classList.remove('expanded');
   try { geoCtl.trigger(); } catch { }
   clearTimeout(navState.watchdog);
@@ -1088,24 +1148,26 @@ function nextToast() {
       <div class="toast-title">${esc(item.title)}</div>
       <div class="toast-sub">${esc(item.sub)}</div>
     </div>`;
+  let dismissed = false;
   const dismiss = () => {
+    if (dismissed) return;
+    dismissed = true;
+    clearTimeout(timer);
     el.classList.add('hiding');
     setTimeout(() => { el.remove(); nextToast(); }, 260);
   };
+  const timer = setTimeout(dismiss, 4000);
   el.addEventListener('click', dismiss);
   $('toast-root').appendChild(el);
-  setTimeout(dismiss, 4000);
 }
 
 /* ================= offline packs ================= */
-async function hasPack(id) {
-  if (!('caches' in window)) return false;
-  const cache = await caches.open(PACK_CACHE);
-  return !!(await cache.match(packUrl(id)));
-}
+function hasPack(id) { return storedPacks.has(id); }
 
-// stream a tile archive to a blob with progress, store in the pack cache
-async function fetchArchive(id, fill, statusEl) {
+// stream a tile archive with progress, store in the pack cache
+// range maps this file's 0-100% into a slice of the visible bar (for multi-file downloads)
+async function fetchArchive(id, fill, statusEl, range) {
+  const { base, span } = range || { base: 0, span: 100 };
   const url = packUrl(id);
   const res = await fetch(url, { cache: 'no-store', headers: { 'x-pack-download': '1' } });
   if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -1116,115 +1178,114 @@ async function fetchArchive(id, fill, statusEl) {
     const { done, value } = await reader.read();
     if (done) break;
     chunks.push(value); got += value.length;
-    if (total) fill.style.width = Math.min(100, (got / total) * 100).toFixed(1) + '%';
+    if (total) fill.style.width = (base + Math.min(1, got / total) * span).toFixed(1) + '%';
     statusEl.textContent = `Downloading… ${(got / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(0)} MB`;
   }
   const blob = new Blob(chunks);
   const cache = await caches.open(PACK_CACHE);
   await cache.put(url, new Response(blob, { headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(blob.size) } }));
+  storedPacks.add(id);
   return blob;
 }
-async function refreshPackUI() {
+function refreshPackUI() {
   if (!current) return;
   const id = current.id;
   const btn = $('btn-pack'), label = $('pack-label'), status = $('pack-status');
   $('pack-progress').hidden = true;
   if (!PACKS[id]) {
     btn.disabled = true;
-    label.textContent = 'Offline map pack coming soon';
+    label.textContent = 'Offline map not published yet';
     status.innerHTML = '';
     return;
   }
   btn.disabled = false;
-  if (await hasPack(id)) {
+  if (hasPack(id)) {
     label.textContent = 'Re-download offline map';
-    status.innerHTML = '<span class="ok">Offline pack stored on this device ✓</span> · map works with no service';
+    status.innerHTML = `<span class="ok">${ICON_CHECK} Offline map downloaded</span>`;
   } else {
     label.textContent = `Download offline map (${(PACKS[id] / 1048576).toFixed(0)} MB)`;
-    status.innerHTML = navigator.onLine
-      ? 'Download on wifi before your trip'
-      : '<span class="warn">Not downloaded. Connect to wifi first</span>';
+    status.innerHTML = navigator.onLine ? '' : '<span class="warn">Not downloaded</span>';
   }
 }
 async function downloadPack() {
-  if (!current || !PACKS[current.id]) return;
+  if (!current || !PACKS[current.id] || downloading) return;
+  downloading = true;
   const id = current.id;
   const btn = $('btn-pack'), bar = $('pack-progress'), fill = $('pack-progress-fill'), status = $('pack-status');
   btn.disabled = true; bar.hidden = false; fill.style.width = '0%';
   try {
     await fetchArchive(id, fill, status);
     fill.style.width = '100%';
-    map.setStyle(sectionStyle(current, TILES.section(id)));
+    // only restyle if the user is still looking at this section
+    if (mode === 'section' && current && current.id === id) {
+      map.setStyle(sectionStyle(current, TILES.section(id)));
+    }
   } catch (err) {
-    status.innerHTML = `<span class="warn">Download failed (${esc(err.message)}). Try again on wifi</span>`;
+    status.innerHTML = `<span class="warn">Download failed (${esc(err.message)})</span>`;
   }
+  downloading = false;
   btn.disabled = false;
-  setTimeout(() => { bar.hidden = true; refreshPackUI(); }, 600);
+  setTimeout(() => { bar.hidden = true; refreshPackUI(); refreshBasemapUI(); }, 600);
 }
 
-/* ---- whole-trail base map + download-all packs ---- */
-async function sectionPackStats() {
+/* ---- Offline maps card: one button, staged (trail map -> all sections -> done) ---- */
+function sectionPackStats() {
   let n = 0, remainingBytes = 0;
   for (const s of index) {
     if (!PACKS[s.id]) continue;
-    if (await hasPack(s.id)) n++;
+    if (hasPack(s.id)) n++;
     else remainingBytes += PACKS[s.id];
   }
-  return { n, remainingBytes };
+  return { n, remainingBytes, packCount: index.filter((s) => PACKS[s.id]).length };
 }
-async function refreshBasemapUI() {
+function refreshBasemapUI() {
   const card = $('basemap-card');
   if (!card) return;
   if (!PACKS.overview) { card.hidden = true; return; }
   card.hidden = false;
-  const stored = await hasPack('overview');
-  $('basemap-label').textContent = stored ? 'Stored ✓' : `Download (${(PACKS.overview / 1048576).toFixed(0)} MB)`;
-  $('btn-basemap').classList.toggle('stored', stored);
-  const { n, remainingBytes } = await sectionPackStats();
-  const packCount = index.filter((s) => PACKS[s.id]).length;
-  $('basemap-status').textContent = stored
-    ? `Whole-trail map on this phone · ${n}/${packCount} section packs stored`
-    : 'One download and the whole-trail map lives on this phone.';
-  $('all-packs-label').textContent = n >= packCount
-    ? 'Every section stored on this phone ✓'
-    : `Download every section for offline use (≈${Math.round(remainingBytes / 1048576)} MB)`;
-  $('btn-all-packs').disabled = n >= packCount;
-}
-async function downloadAllPacks() {
-  const btn = $('btn-all-packs'), bar = $('basemap-progress'), fill = $('basemap-progress-fill'), status = $('basemap-status');
-  btn.disabled = true; $('btn-basemap').disabled = true; bar.hidden = false;
-  try {
-    if (!(await hasPack('overview'))) {
-      status.textContent = 'Base map…';
-      await fetchArchive('overview', fill, status);
-    }
-    const todo = index.filter((s) => PACKS[s.id]);
-    for (let i = 0; i < todo.length; i++) {
-      const s = todo[i];
-      if (await hasPack(s.id)) continue;
-      status.textContent = `Section ${s.letter} (${s.state}) · ${i + 1} of ${todo.length}…`;
-      fill.style.width = ((i / todo.length) * 100).toFixed(0) + '%';
-      await fetchArchive(s.id, fill, status);
-    }
-    fill.style.width = '100%';
-  } catch (err) {
-    status.textContent = `Stopped (${err.message}). Tap again to resume where it left off.`;
+  const trailMap = hasPack('overview');
+  const { n, remainingBytes, packCount } = sectionPackStats();
+  const allDone = trailMap && n >= packCount;
+  card.classList.toggle('done', allDone);
+  $('btn-basemap').hidden = allDone;
+  if (allDone) {
+    $('basemap-status').innerHTML = `<span class="ok">${ICON_CHECK} Trail map and all ${packCount} sections downloaded</span>`;
+  } else if (!trailMap) {
+    $('basemap-label').textContent = `Download trail map (${(PACKS.overview / 1048576).toFixed(0)} MB)`;
+    $('basemap-status').textContent = 'Works with no service once downloaded';
+  } else {
+    $('basemap-label').textContent = `Download all sections (≈${Math.round(remainingBytes / 1048576)} MB)`;
+    $('basemap-status').innerHTML = `<span class="ok">${ICON_CHECK} Trail map downloaded</span> · ${n}/${packCount} sections`;
   }
-  $('btn-basemap').disabled = false;
-  setTimeout(() => { bar.hidden = true; refreshBasemapUI(); renderList(); }, 800);
 }
-async function downloadBasemap() {
-  if (await hasPack('overview')) return;
+async function basemapAction() {
+  if (downloading) return;
+  downloading = true;
   const btn = $('btn-basemap'), bar = $('basemap-progress'), fill = $('basemap-progress-fill'), status = $('basemap-status');
   btn.disabled = true; bar.hidden = false; fill.style.width = '0%';
   try {
-    await fetchArchive('overview', fill, status);
-    if (mode === 'list') map.setStyle(overviewStyle());
+    if (!hasPack('overview')) {
+      await fetchArchive('overview', fill, status);
+      if (mode === 'list') map.setStyle(overviewStyle());
+    } else {
+      const todo = index.filter((s) => PACKS[s.id] && !hasPack(s.id));
+      for (let i = 0; i < todo.length; i++) {
+        const s = todo[i];
+        status.textContent = `Section ${s.letter} (${s.state}) · ${i + 1} of ${todo.length}`;
+        await fetchArchive(s.id, fill, status, { base: (i / todo.length) * 100, span: 100 / todo.length });
+      }
+      fill.style.width = '100%';
+    }
   } catch (err) {
-    status.textContent = `Download failed (${err.message}). Try again on wifi.`;
+    status.textContent = `Stopped (${err.message}). Tap again to resume.`;
   }
+  downloading = false;
   btn.disabled = false;
-  setTimeout(() => { bar.hidden = true; refreshBasemapUI(); }, 600);
+  setTimeout(() => {
+    bar.hidden = true;
+    refreshBasemapUI();
+    if (mode === 'list') renderList();
+  }, 800);
 }
 
 /* ================= sync ================= */
@@ -1253,18 +1314,18 @@ function importSync() {
     if (!ivs) throw new Error('unusable');
     progress = mergeIntervals(ivs);
     saveProgress();
+    $('sync-warn').hidden = true;
     $('modal').hidden = true;
     if (mode === 'section') renderSectionState();
   } catch {
-    alert('That code did not parse. Paste the exact code from your other device.');
+    $('sync-warn').hidden = false;
   }
 }
 
 /* ================= ui wiring ================= */
 function wireUI() {
   $('btn-back').addEventListener('click', closeSection);
-  $('btn-basemap').addEventListener('click', downloadBasemap);
-  $('btn-all-packs').addEventListener('click', downloadAllPacks);
+  $('btn-basemap').addEventListener('click', basemapAction);
   $('btn-nav').addEventListener('click', enterNav);
   $('btn-nav-end').addEventListener('click', exitNav);
   $('dir-nobo').addEventListener('click', () => setDir(1));
@@ -1276,7 +1337,7 @@ function wireUI() {
   $('btn-close-modal').addEventListener('click', () => { $('modal').hidden = true; });
   $('btn-copy-code').addEventListener('click', async () => {
     $('sync-code').value = syncCode();
-    try { await navigator.clipboard.writeText($('sync-code').value); $('btn-copy-code').textContent = 'Copied ✓'; }
+    try { await navigator.clipboard.writeText($('sync-code').value); $('btn-copy-code').textContent = 'Copied'; }
     catch { $('sync-code').select(); document.execCommand('copy'); }
     setTimeout(() => { $('btn-copy-code').textContent = 'Copy my code'; }, 1500);
   });
@@ -1288,12 +1349,14 @@ function wireUI() {
   );
 
   const panel = $('panel');
-  $('sheet-handle').addEventListener('click', () => panel.classList.toggle('expanded'));
+  $('sheet-handle').addEventListener('click', () => {
+    const expanded = panel.classList.toggle('expanded');
+    $('sheet-handle').setAttribute('aria-label', expanded ? 'Collapse panel' : 'Expand panel');
+  });
 
   document.querySelectorAll('.state-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
       const st = tab.dataset.state;
-      document.querySelectorAll('.state-tab').forEach((t) => t.classList.toggle('active', t === tab));
       if (window.matchMedia('(max-width: 760px)').matches) panel.classList.add('expanded');
       const head = $('state-head-' + st);
       if (head) head.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1319,4 +1382,8 @@ function wireUI() {
 
 function updateOnline() {
   $('offline-badge').hidden = navigator.onLine;
+  if (navigator.onLine && index) {
+    refreshBasemapUI();
+    if (mode === 'section' && current) { refreshPackUI(); loadWeather(current); }
+  }
 }
