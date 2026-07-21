@@ -502,7 +502,7 @@ async function openSection(id) {
   if (seq !== openSeq) return; // a newer tap superseded this one while data loaded
   current = sectionCache[id];
   mode = 'section';
-  if (window.matchMedia('(max-width: 760px)').matches) $('panel').classList.add('expanded');
+  if (isMobile()) setSheet('half'); // actions in reach, map still visible
 
   const archive = PACKS[id] ? TILES.section(id) : TILES.overview;
   map.setStyle(sectionStyle(current, archive));
@@ -528,7 +528,7 @@ function closeSection() {
   if (navState.active) exitNav();
   mode = 'list'; current = null;
   closeLogger();
-  $('panel').classList.remove('expanded');
+  if (isMobile()) setSheet('half');
   map.setStyle(overviewStyle());
   map.fitBounds([[-124.8, 32.4], [-116.6, 49.1]], { padding: 40, duration: 1000 });
   $('view-list').hidden = false;
@@ -764,7 +764,7 @@ function openLogger() {
   $('logger-hint').hidden = !!localStorage.getItem('pct-hint-drag');
   $('logger').hidden = false;
   $('btn-log').hidden = true;
-  if (window.matchMedia('(max-width: 760px)').matches) $('panel').classList.add('expanded');
+  if (isMobile()) setSheet('full'); // logging is hands-on: give the scrubber room
   renderLogger();
   drawElevation();
 }
@@ -1062,6 +1062,8 @@ function enterNav() {
   $('nav-eyebrow').textContent = `Section ${current.letter} · Navigating`;
   $('nav-mile').textContent = '····';
   $('nav-status').textContent = 'Waiting for GPS…';
+  $('panel').classList.add('nav-mode');
+  if (isMobile()) setSheet('peek'); // max map on trail; mile readout stays visible
   // show plainly where the map is coming from
   const stored = hasPack(current.id);
   const srcEl = $('nav-src');
@@ -1069,7 +1071,6 @@ function enterNav() {
   srcEl.innerHTML = stored
     ? `${ICON_CHECK} Offline map downloaded. Works with no service.`
     : `${ICON_DOWNLOAD} Streaming. Download this section's offline map before you lose service.`;
-  document.getElementById('panel').classList.remove('expanded');
   try { geoCtl.trigger(); } catch { }
   clearTimeout(navState.watchdog);
   navState.watchdog = setTimeout(() => {
@@ -1080,6 +1081,8 @@ function enterNav() {
 function exitNav() {
   navState.active = false;
   clearTimeout(navState.watchdog);
+  $('panel').classList.remove('nav-mode');
+  if (isMobile()) setSheet('half');
   $('view-nav').hidden = true;
   $('view-section').hidden = false;
   renderSectionState();
@@ -1322,6 +1325,63 @@ function importSync() {
   }
 }
 
+/* ================= bottom sheet: peek / half / full ================= */
+let sheetState = 'half';
+const isMobile = () => window.matchMedia('(max-width: 760px)').matches;
+function setSheet(state) {
+  const panel = $('panel');
+  panel.classList.remove('peek', 'expanded');
+  if (state === 'peek') panel.classList.add('peek');
+  if (state === 'full') panel.classList.add('expanded');
+  panel.style.height = '';
+  sheetState = state;
+  $('sheet-handle').setAttribute('aria-label',
+    state === 'full' ? 'Shrink panel' : state === 'half' ? 'Shrink panel to map view' : 'Expand panel');
+}
+function sheetHeights() {
+  const peek = ($('panel').classList.contains('nav-mode') ? 190 : 158);
+  return { peek, half: innerHeight * 0.44, full: innerHeight * 0.82 };
+}
+function wireSheet(panel) {
+  const handle = $('sheet-handle');
+  // tap cycles map-first -> split -> full -> map-first
+  handle.addEventListener('click', () => {
+    if (!isMobile()) return;
+    setSheet(sheetState === 'peek' ? 'half' : sheetState === 'half' ? 'full' : 'peek');
+  });
+  // drag to any position, snap to nearest stop on release
+  let dragging = false, startY = 0, startH = 0, moved = false;
+  handle.addEventListener('pointerdown', (ev) => {
+    if (!isMobile()) return;
+    dragging = true; moved = false;
+    startY = ev.clientY;
+    startH = panel.getBoundingClientRect().height;
+    handle.setPointerCapture(ev.pointerId);
+  });
+  handle.addEventListener('pointermove', (ev) => {
+    if (!dragging) return;
+    const dy = startY - ev.clientY;
+    if (Math.abs(dy) > 6) moved = true;
+    if (!moved) return;
+    const { peek, full } = sheetHeights();
+    panel.style.transition = 'none';
+    panel.style.height = Math.max(peek, Math.min(full, startH + dy)) + 'px';
+  });
+  const endDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    panel.style.transition = '';
+    if (!moved) return; // plain tap: the click handler cycles instead
+    const h = panel.getBoundingClientRect().height;
+    const { peek, half, full } = sheetHeights();
+    const nearest = [['peek', peek], ['half', half], ['full', full]]
+      .sort((a, b) => Math.abs(h - a[1]) - Math.abs(h - b[1]))[0][0];
+    setSheet(nearest);
+  };
+  handle.addEventListener('pointerup', endDrag);
+  handle.addEventListener('pointercancel', endDrag);
+}
+
 /* ================= ui wiring ================= */
 function wireUI() {
   $('btn-back').addEventListener('click', closeSection);
@@ -1349,15 +1409,12 @@ function wireUI() {
   );
 
   const panel = $('panel');
-  $('sheet-handle').addEventListener('click', () => {
-    const expanded = panel.classList.toggle('expanded');
-    $('sheet-handle').setAttribute('aria-label', expanded ? 'Collapse panel' : 'Expand panel');
-  });
+  wireSheet(panel);
 
   document.querySelectorAll('.state-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
       const st = tab.dataset.state;
-      if (window.matchMedia('(max-width: 760px)').matches) panel.classList.add('expanded');
+      if (isMobile()) setSheet('full');
       const head = $('state-head-' + st);
       if (head) head.scrollIntoView({ behavior: 'smooth', block: 'start' });
       // fly the map to that state's stretch of trail

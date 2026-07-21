@@ -538,8 +538,20 @@ footer#install-hint .ic { width: 16px; height: 16px; color: var(--accentBlue); }
     height: 44dvh;
     transition: height .35s cubic-bezier(.22,1,.36,1);
     position: relative;
+    overflow: hidden;
   }
   #panel.expanded { height: 82dvh; }
+  /* peek: map-first, just the stats strip (or the nav mile readout) */
+  #panel.peek { height: calc(158px + env(safe-area-inset-bottom)); }
+  #panel.peek .hero .kicker, #panel.peek .hero-states, #panel.peek .hero-next { display: none; }
+  #panel.peek .hero { padding: 14px 18px 16px; }
+  #panel.peek .hero h1 { font-size: 1.05rem; margin: 0 0 8px; }
+  #panel.peek .hero-stats { gap: 14px; }
+  /* navigate mode: the HUD is the whole story; drop the app header */
+  #panel.nav-mode .hero { display: none; }
+  #panel.nav-mode #panel-body { padding-top: 22px; }
+  #panel.nav-mode.peek { height: calc(196px + env(safe-area-inset-bottom)); }
+  #panel.nav-mode .sheet-handle .handle-pill { background: var(--textWarmMuted); opacity: .5; }
   .hero { padding: 12px 18px 12px; border-radius: 18px 18px 0 0; }
   .hero h1 { font-size: 1.15rem; margin: 2px 0 8px; }
   .hero-stats { gap: 16px; }
